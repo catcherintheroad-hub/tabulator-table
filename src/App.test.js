@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import App from './App';
+import { sortIsoDate } from './Todo/Tabulator';
 
 test('renders the C.A.R.D.S. Tabulator dashboard shell', () => {
   render(<App />);
@@ -34,6 +35,14 @@ test('configures Tabulator with pro dashboard columns, pagination, and player se
     'Value',
     'Status',
     'Date',
+  ]);
+
+  const dateColumn = config.columns.find((column) => column.field === 'date');
+  expect(dateColumn.sorter).toBe(sortIsoDate);
+  expect(['2026-05-24', '2026-05-30', '2026-05-18'].sort(dateColumn.sorter)).toEqual([
+    '2026-05-18',
+    '2026-05-24',
+    '2026-05-30',
   ]);
 
   fireEvent.change(screen.getByRole('searchbox', { name: /search by player name/i }), {

@@ -75,6 +75,10 @@ function normalizeCard(card) {
   };
 }
 
+export function sortIsoDate(a, b) {
+  return String(a || '').localeCompare(String(b || ''));
+}
+
 export default function Tabulator() {
   const [globalSearch, setGlobalSearch] = useState('');
   const tableElementRef = useRef(null);
@@ -140,7 +144,7 @@ export default function Tabulator() {
           title: 'Date',
           field: 'date',
           width: 126,
-          sorter: 'date',
+          sorter: sortIsoDate,
         },
       ],
     });
