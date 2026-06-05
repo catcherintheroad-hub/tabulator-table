@@ -1,0 +1,13 @@
+{
+  "files": {
+    "main.css": "/tabulator-table/static/css/main.a6a06927.css",
+    "main.js": "/tabulator-table/static/js/main.1f46d710.js",
+    "index.html": "/tabulator-table/index.html",
+    "main.a6a06927.css.map": "/tabulator-table/static/css/main.a6a06927.css.map",
+    "main.1f46d710.js.map": "/tabulator-table/static/js/main.1f46d710.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.a6a06927.css",
+    "static/js/main.1f46d710.js"
+  ]
+}
