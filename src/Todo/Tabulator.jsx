@@ -1,121 +1,193 @@
-import axios from 'axios';
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import proDashboardCards from './proDashboardCards';
+
+const TABULATOR_CSS_ID = 'cards-tabulator-css';
+const TABULATOR_SCRIPT_ID = 'cards-tabulator-script';
+const TABULATOR_CSS_URL = 'https://unpkg.com/tabulator-tables/dist/css/tabulator_midnight.min.css';
+const TABULATOR_SCRIPT_URL = 'https://unpkg.com/tabulator-tables/dist/js/tabulator.min.js';
+
+function useTabulatorCdn() {
+  const [isReady, setIsReady] = useState(() => Boolean(window.Tabulator));
+
+  useEffect(() => {
+    if (window.Tabulator) {
+      setIsReady(true);
+      return undefined;
+    }
+
+    if (!document.getElementById(TABULATOR_CSS_ID)) {
+      const link = document.createElement('link');
+      link.id = TABULATOR_CSS_ID;
+      link.rel = 'stylesheet';
+      link.href = TABULATOR_CSS_URL;
+      document.head.appendChild(link);
+    }
+
+    let script = document.getElementById(TABULATOR_SCRIPT_ID);
+    const handleLoad = () => setIsReady(Boolean(window.Tabulator));
+
+    if (!script) {
+      script = document.createElement('script');
+      script.id = TABULATOR_SCRIPT_ID;
+      script.src = TABULATOR_SCRIPT_URL;
+      script.async = true;
+      script.addEventListener('load', handleLoad);
+      document.body.appendChild(script);
+    } else {
+      script.addEventListener('load', handleLoad);
+    }
+
+    return () => {
+      script.removeEventListener('load', handleLoad);
+    };
+  }, []);
+
+  return isReady;
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;',
+  }[character]));
+}
+
+function formatCurrency(value) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  }).format(Number(value) || 0);
+}
+
+function normalizeCard(card) {
+  const grade = card.grade === null || card.grade === undefined ? null : Number(card.grade);
+  const gradeLabel = grade ? `${card.grader || 'PSA'} ${grade}` : 'Raw';
+
+  return {
+    ...card,
+    grade,
+    gradeLabel,
+    status: card.status || (grade ? 'Hold' : 'Raw'),
+  };
+}
 
 export default function Tabulator() {
-    const [data, setData] = useState([]);
-    const [status, setStatus] = useState('');
-    const [title, setTitle] = useState('');
-    const [descriptions, setDescription] = useState('');
-    useEffect(() => {
-        axios.get(' https://jsonplaceholder.typicode.com/todos').then(function (response) {
-            setData(response.data.slice(0, 20).filter((val) => val.description = 'Hello World..'))
-        })
-    }, []);
+  const [globalSearch, setGlobalSearch] = useState('');
+  const tableElementRef = useRef(null);
+  const tableInstanceRef = useRef(null);
+  const isTabulatorReady = useTabulatorCdn();
+  const tableData = useMemo(() => proDashboardCards.map(normalizeCard), []);
 
-    const submitting = (e) => {
-        e.preventDefault();
-        setData([...data, { title: title, description: descriptions, completed: status }])
-        setDescription('');
-        setTitle('');
+  useEffect(() => {
+    if (!isTabulatorReady || !tableElementRef.current) {
+      return undefined;
     }
 
-    const TitleEdit = (val, index, array1) => {
-        let newValue = prompt(`Enter a new value for ${val}`);
-        if (newValue === '') {
-            alert('Should not be empty')
-        } else {
-            data.splice(index, 1, { title: newValue, description: array1[index].description, completed: array1[index].completed });
-            setData([...data])
-        }
+    tableInstanceRef.current = new window.Tabulator(tableElementRef.current, {
+      data: tableData,
+      layout: 'fitColumns',
+      pagination: true,
+      paginationSize: 20,
+      placeholder: 'No cards match this view.',
+      initialSort: [{ column: 'date', dir: 'desc' }],
+      columns: [
+        {
+          title: '',
+          field: 'image',
+          width: 72,
+          headerSort: false,
+          formatter: (cell) => `<img class="card-avatar" alt="" src="${escapeHtml(cell.getValue())}" />`,
+        },
+        {
+          title: 'Title',
+          field: 'cardTitle',
+          minWidth: 280,
+          formatter: (cell) => {
+            const row = cell.getRow().getData();
+            return `<span class="card-title-cell"><strong>${escapeHtml(row.cardTitle)}</strong><span>${escapeHtml(row.playerName)}</span></span>`;
+          },
+        },
+        {
+          title: 'Grade',
+          field: 'grade',
+          width: 122,
+          sorter: 'number',
+          formatter: (cell) => {
+            const row = cell.getRow().getData();
+            const className = row.grade >= 10 ? 'grade-badge--gem' : row.grade ? 'grade-badge--graded' : 'grade-badge--raw';
+            return `<span class="grade-badge ${className}">${escapeHtml(row.gradeLabel)}</span>`;
+          },
+        },
+        {
+          title: 'Value',
+          field: 'value',
+          width: 136,
+          sorter: 'number',
+          hozAlign: 'right',
+          formatter: (cell) => `<strong>${formatCurrency(cell.getValue())}</strong>`,
+        },
+        {
+          title: 'Status',
+          field: 'status',
+          width: 132,
+          formatter: (cell) => `<span class="status-tag">${escapeHtml(cell.getValue())}</span>`,
+        },
+        {
+          title: 'Date',
+          field: 'date',
+          width: 126,
+          sorter: 'date',
+        },
+      ],
+    });
+
+    return () => {
+      tableInstanceRef.current?.destroy();
+      tableInstanceRef.current = null;
+    };
+  }, [isTabulatorReady, tableData]);
+
+  useEffect(() => {
+    if (!tableInstanceRef.current) {
+      return;
     }
 
-    const descriptionEdit = (val, index, array1) => {
-        let newValue = prompt(`Enter a new value for ${val}`);
-        if (newValue === '') {
-            alert('Should not be empty')
-        } else {
-            data.splice(index, 1, { title: array1[index].title, description: newValue, completed: array1[index].completed });
-            setData([...data])
-        }
+    const query = globalSearch.trim();
+    if (!query) {
+      tableInstanceRef.current.clearFilter();
+      return;
     }
 
-    const statusEdit = (val, index, array1) => {
+    tableInstanceRef.current.setFilter('playerName', 'like', query);
+  }, [globalSearch]);
 
-    }
+  return (
+    <main className="cards-dashboard">
+      <section className="cards-dashboard__header" aria-labelledby="cards-dashboard-title">
+        <div>
+          <p className="cards-dashboard__eyebrow">C.A.R.D.S. Pro Dashboard</p>
+          <h1 id="cards-dashboard-title">Sports Card Inventory</h1>
+        </div>
+        <label className="cards-dashboard__search">
+          <span>Player search</span>
+          <input
+            aria-label="Search by player name"
+            type="search"
+            placeholder="Search Jordan, Curry, Wembanyama..."
+            value={globalSearch}
+            onChange={(event) => setGlobalSearch(event.target.value)}
+          />
+        </label>
+      </section>
 
-    return (
-        <div style={{ width: '100%', padding: 18 }}>
-            <h1>Task List Manager with Editable Table</h1>
-            <div style={{padding: 15, margin: 'auto', marginBottom: '66px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', width: '80%' }}>
-                <form style={{ width: '100%', maxWidth: '700px', width: '100%', padding: '10px', display: 'flex', flexDirection: 'column', gap: '10px', justifyContent: 'center', alignItems: 'center' }} onSubmit={submitting}>
-                    <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'flex-start', width: '100%', alignContent: 'flex-start' }}>
-                        <label style={{ fontWeight: 'bold' }} >Title</label>
-                        <input type='text' name='title' placeholder='enter the title' style={{ padding: 10, width: '100%', border: '1px solid black' }} value={title} onChange={(e) => { setTitle(e.target.value) }} required />
-                    </div>
-                    <div style={{ display: 'flex', gap: '8px', flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'flex-start', width: '100%' }}>
-                        <label style={{ fontWeight: 'bold' }}>Description</label>
-                        <textarea rows={4} cols={20} placeholder='type the description' style={{ padding: 10, width: '100%', border: '1px solid black' }} value={descriptions} onChange={(e) => setDescription(e.target.value)} />
-                    </div>
-                    <div style={{ display: 'flex', gap: '8px', flexDirection: 'column', justifyContent: 'flex-start', alignItems: 'flex-start', width: '100%' }}>
-                        <label style={{ fontWeight: 'bold' }} >Status</label>
-                        <select value={status} onChange={e => setStatus(e.target.value)} style={{ padding: 10, width: '100%', border: '1px solid black' }}>
-                            <option value="Done">Done</option>
-                            <option value="In Progress">In Progress</option>
-                            <option value="To Do">To Do</option>
-                        </select>
-                    </div>
-                    <input type='submit' value='Submit' style={{ fontSize: 18, width: 'fit-content', paddingLeft: 30, paddingRight: 30, paddingTop: 10, paddingBottom: 10 }} />
-                </form>
-            </div>
-            <div style={{overflowX:'auto'}}>
-            <table style={{ borderCollapse: 'collapse', width: '900px', margin: 'auto', overflow: 'auto' }}>
-                <tr style={{ backgroundColor: '#D3d3d3' }}>
-                    <th>Title <button onClick={() => {
-                        data.sort((a, b) => {
-                            if (a.title < b.title) {
-                                return -1;
-                            }
-                            if (a.title > b.title) {
-                                return 1;
-                            }
-                            return 0;
-                        });
-                        setData([...data])
-                    }} style={{ border: 'none' }}>sort</button></th>
-                    <th>Description <button onClick={() => {
-                        data.sort((a, b) => {
-                            if (a.description < b.description) {
-                                return -1;
-                            }
-                            if (a.description > b.description) {
-                                return 1;
-                            }
-                            return 0;
-                        });
-                        setData([...data])
-                    }} style={{ border: 'none' }}>sort</button></th>
-                    <th style={{ padding: 10 }}>Status
-                    </th>
-                    <th>Action</th>
-                </tr>
-                {data && data.map((item, ind, aray) => {
-                    return (
-                        <tr key={ind} style={{ backgroundColor: item.completed == true ? 'pink' : item.completed == 'In Progress' ? '#FF7F7F' : item.completed == 'Done' ? 'pink' : '#FF7F7F' }}>
-                            <td style={{ maxWidth: '200px' }}>{item.title}<button onClick={() => TitleEdit(title, ind, aray)} style={{ border: 'none', color: 'red', marginLeft: 6 }}>edit</button></td>
-                            <td style={{ maxWidth: '800px' }} >{item.description}<button onClick={() => descriptionEdit(descriptions, ind, aray)} style={{ border: 'none', color: 'red', marginLeft: 6 }}>edit</button></td>
-                            <td style={{ color: 'black', padding: 20, maxWidth: '790px' }}>{item.completed == true ? 'Done' : item.completed == 'To Do' ? 'To Do' : item.completed == 'In Progress' ? 'In Progress' : item.completed == 'Done' ? 'Done' : 'To Do'}
-                                {/* <button onClick={() => statusEdit(status, ind, aray)} style={{ border: 'none', color: 'red', marginLeft: 6 }}>edit</button> */}
-                            </td>
-                            <td><button onClick={(ind) => {
-                                data.splice(ind, 1);
-                                setData([...data])
-                            }} style={{ border: 'none' }} >Delete</button></td>
-                        </tr>
-                    )
-                })}
-            </table>
-            </div>
-          
-        </div >
-    )
+      {!isTabulatorReady && (
+        <div className="cards-dashboard__loading">Loading Tabulator table...</div>
+      )}
+      <div className="cards-dashboard__table" ref={tableElementRef} />
+    </main>
+  );
 }
